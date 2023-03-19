@@ -1,0 +1,693 @@
+---
+title: "School Safety"
+author: "Lauren Berny"
+output: 
+  flexdashboard::flex_dashboard:
+    theme:
+      bg: "#FFFFFF"
+      fg: "#000000" 
+      primary: "#68228b"
+      base_font:
+        google: Poppins
+      code_font:
+        google: JetBrains Mono
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(colorblindr)
+library(rio)
+library(here)
+library(tidyverse)
+library(gghighlight)
+library(scales)
+library(viridis)
+library(albersusa)
+library(plotly)
+library(ggrepel)
+library(sf)
+library(rcartocolor)
+library(stringr)
+options(scipen=10000)
+
+yrbs_nat <- import(here("data", "yrbs_nat.RDS"))
+
+yrbs_fact <- import(here("data", "yrbs_fact.RDS"))
+
+us2 <- import(here("data", "us.csv"))
+
+us <- usa_sf()
+
+qn13 <- yrbs_fact %>%
+ select(weight, "iso_3166_2" = "State Code", year, "qn" = "qn13") %>% 
+ filter(!is.na(qn)) %>% 
+ group_by(iso_3166_2, year, qn) %>% 
+ count(qn, wt = weight) %>% 
+ group_by(iso_3166_2, year) %>% 
+ mutate(freq = n / sum(n)) %>% 
+ mutate(percent = freq*100, question = "Carried a weapon on school property (past 30 days)") %>% 
+ filter(qn=="Yes")
+qn13$iso_3166_2 <- as.factor(qn13$iso_3166_2)
+
+qn15 <- yrbs_fact %>%
+ select(weight, "iso_3166_2" = "State Code", year, "qn" = "qn15") %>% 
+ filter(!is.na(qn)) %>% 
+ group_by(iso_3166_2, year, qn) %>% 
+ count(qn, wt = weight) %>% 
+ group_by(iso_3166_2, year) %>% 
+ mutate(freq = n / sum(n)) %>% 
+ mutate(percent = freq*100, question = "Did not go to school because they felt unsafe (past 30 days)") %>% 
+ filter(qn=="Yes")
+qn15$iso_3166_2 <- as.factor(qn15$iso_3166_2)
+
+qn16 <- yrbs_fact %>%
+ select(weight, "iso_3166_2" = "State Code", year, "qn" = "qn16") %>% 
+ filter(!is.na(qn)) %>% 
+ group_by(iso_3166_2, year, qn) %>% 
+ count(qn, wt = weight) %>% 
+ group_by(iso_3166_2, year) %>% 
+ mutate(freq = n / sum(n)) %>% 
+ mutate(percent = freq*100, question = "Were threatened/injured with a weapon at school (past 12 months)") %>% 
+ filter(qn=="Yes")
+qn16$iso_3166_2 <- as.factor(qn16$iso_3166_2)
+
+qn18 <- yrbs_fact %>%
+ select(weight, "iso_3166_2" = "State Code", year, "qn" = "qn18") %>% 
+ filter(!is.na(qn)) %>% 
+ group_by(iso_3166_2, year, qn) %>% 
+ count(qn, wt = weight) %>% 
+ group_by(iso_3166_2, year) %>% 
+ mutate(freq = n / sum(n)) %>% 
+ mutate(percent = freq*100, question = "Were in a physical fight on school property (past 12 months)") %>% 
+ filter(qn=="Yes")
+qn18$iso_3166_2 <- as.factor(qn18$iso_3166_2)
+
+schoolsafety <- rbind(qn13, qn15, qn16, qn18)
+
+schoolsafety <- schoolsafety %>% 
+ filter(year==2019)
+
+full_set <- expand.grid(iso_3166_2 = unique(us$iso_3166_2), question = unique(schoolsafety$question))
+school <- left_join(full_set, schoolsafety)
+school_geo <- left_join(us, school)
+
+school_geo13 <- school_geo %>% 
+ filter(question=="Carried a weapon on school property (past 30 days)")
+
+school_geo15 <- school_geo %>% 
+ filter(question=="Did not go to school because they felt unsafe (past 30 days)")
+
+school_geo16 <- school_geo %>% 
+ filter(question=="Were threatened/injured with a weapon at school (past 12 months)")
+
+school_geo18 <- school_geo %>% 
+ filter(question=="Were in a physical fight on school property (past 12 months)")
+
+qn15nat <- yrbs_nat %>%
+ select(weight, year, "qn" = "qn15") %>% 
+ filter(!is.na(qn)) %>% 
+ group_by(year, qn) %>% 
+ count(qn, wt = weight) %>% 
+ group_by(year) %>% 
+ mutate(freq = n / sum(n)) %>% 
+ mutate(percent = freq*100, question = "Did not go to school because they felt unsafe (past 30 days)") %>% 
+ filter(qn=="Yes")
+
+qn18nat <- yrbs_nat %>%
+ select(weight, year, "qn" = "qn18") %>% 
+ filter(!is.na(qn)) %>% 
+ group_by(year, qn) %>% 
+ count(qn, wt = weight) %>% 
+ group_by(year) %>% 
+ mutate(freq = n / sum(n)) %>% 
+ mutate(percent = freq*100, question = "Were in a physical fight on school property (past 12 months)") %>% 
+ filter(qn=="Yes")
+
+qn13nat <- yrbs_nat %>%
+ select(weight, year, "qn" = "qn13") %>% 
+ filter(!is.na(qn)) %>% 
+ group_by(year, qn) %>% 
+ count(qn, wt = weight) %>% 
+ group_by(year) %>% 
+ mutate(freq = n / sum(n)) %>% 
+ mutate(percent = freq*100, question = "Carried a weapon on school property (past 30 days)") %>% 
+ filter(qn=="Yes")
+
+qn16nat <- yrbs_nat %>%
+ select(weight, year, "qn" = "qn16") %>% 
+ filter(!is.na(qn)) %>% 
+ group_by(year, qn) %>% 
+ count(qn, wt = weight) %>% 
+ group_by(year) %>% 
+ mutate(freq = n / sum(n)) %>% 
+ mutate(percent = freq*100, question = "Were threatened/injured with a weapon at school (past 12 months)") %>% 
+ filter(qn=="Yes")
+
+schoolsafetynat <- rbind(qn13nat, qn15nat, qn16nat, qn18nat)
+
+us2 <- us2 %>% 
+ select(iso_3166_2, rank, Division)
+
+qn13_2019 <- qn13 %>% 
+ filter(year=="2019")
+ 
+law <- left_join(qn13_2019, us2)
+
+race <- yrbs_nat %>%
+ select(weight, "qn" = "qn15",  "demographic" = "race4") %>% 
+ filter(!is.na(qn)) %>%
+ filter(!is.na(demographic)) %>% 
+ group_by(demographic) %>% 
+ count(qn, wt = weight) %>% 
+ mutate(freq = n / sum(n)) %>% 
+ mutate(percent = freq*100, group = "Race/Ethnicity") %>% 
+ filter(qn=="Yes")
+race$demographic <- recode_factor(race$demographic, "Black or African American" = "Black", "Hispanic/Latino " = "Hispanic/Latinx")
+race$demographic <- fct_reorder(race$demographic, race$percent)
+
+sex <- yrbs_nat %>%
+ select(weight, "qn" = "qn15", "demographic" = "sex") %>% 
+ filter(!is.na(qn)) %>% 
+ filter(!is.na(demographic)) %>% 
+ group_by(demographic) %>% 
+ count(qn, wt = weight) %>% 
+ mutate(freq = n / sum(n)) %>% 
+ mutate(percent = freq*100, group = "Sex") %>% 
+ filter(qn=="Yes")
+
+sex$demographic <- fct_reorder(sex$demographic, sex$percent)
+
+sexid <- yrbs_nat %>%
+ select(weight, "qn" = "qn15", "demographic" = "sexid") %>% 
+ filter(!is.na(qn)) %>% 
+ filter(!is.na(demographic)) %>% 
+ group_by(demographic) %>% 
+ count(qn, wt = weight) %>% 
+ mutate(freq = n / sum(n)) %>% 
+ mutate(percent = freq*100, group = "Sexual Identity") %>% 
+ filter(qn=="Yes")
+sexid$demographic <- recode_factor(sexid$demographic, "Not Sure" = "Unsure of sexuality")
+sexid$demographic <- fct_reorder(sexid$demographic, sexid$percent)
+
+demos <- rbind(sex, sexid, race)
+demos$group <- as.factor(demos$group)
+demos$group <- relevel(demos$group, "Sexual Identity")
+
+cor(law$rank, law$percent, method = c("pearson"))
+cor.test(law$rank, law$percent, method=c("pearson"))
+```
+
+National-Level Data {data-orientation=rows}
+=====================================
+## Row 1 {data-height="180"}
+-------------------------------------
+### Summary
+Data from the Centers for Disease Control and Prevention's Youth Risk Behavioral Surveillance (YRBS) System were used to examine school safety experiences of U.S. high school students. For more information, please see the <span style="color:#68228b">**Data Information**</span> tab. Despite other school safety indicators decreasing (weapon carrying and physical fights) or remaining the same (experiencing weapon violence or threats), the proportion of students who skipped school due to safety concerns <span style="color:#68228b">**more than doubled**</span> from 1993 to 2019. Students of non-majority <span style="color:#68228b">**sexual identities**</span> and <span style="color:#68228b">**race/ethnicities**</span> were substantially more likely to report skipping school due to safety concerns in 2019.
+
+## Row 2 {data-height="720"}
+-------------------------------------
+### Longitudinal Trends (1993-2019)
+```{r}
+nat <- ggplot(schoolsafetynat, aes(x = year, y = freq, fill = question, group=1, text = paste0(
+    "Year: ", year,
+    "<br>",
+    "Yes: ", round(freq*100,2),paste0("%")))) +
+ facet_wrap(~question, labeller = label_wrap_gen(width = 40)) +
+  geom_line() +
+  geom_point(size = 3, shape = 21) +
+ scale_x_continuous(limits = c(1993,2019), n.breaks = 7) +
+ scale_y_continuous(limits = c(0, .20), labels = scales::percent) +
+ scale_fill_discrete_sequential(palette = "sunset") +
+ labs(x = "Year", y = "Percent of students surveyed", title = "School Safety Trends Reported by U.S. High School Students") +
+ theme_bw() +
+  theme(legend.position = "none", 
+        axis.text = element_text(size = 7), panel.spacing.y = unit(8, "pt"))
+
+facet_strip_bigger <- function(gp, size){
+  if(missing(gp)){
+    print("this function needs a facet_wrap ggplotly object")
+  }
+  if(missing(size)){
+    size <- 35
+  }
+ 
+   n_facets <- c(1:length(gp[["x"]][["layout"]][["shapes"]]))
+  
+  for(i in n_facets){
+    if(n_facets[i] %% 2 == 0){
+      gp[["x"]][["layout"]][["shapes"]][[i]][["y0"]] <- + as.numeric(size)
+      gp[["x"]][["layout"]][["shapes"]][[i]][["y1"]] <- 0
+    }
+  }
+  
+  return(gp)
+}
+
+x <- ggplotly(nat, tooltip = "text")
+
+x %>% 
+ ggplotly() %>% 
+   layout(title = list(y = 0.97,
+                      yanchor = "top",
+                      yef = "container"),
+         margin = list(t = 80)) %>% 
+ facet_strip_bigger()
+```
+
+### Who Has Saftey Concerns? (2019)
+```{r}
+demoplot <- demos %>%
+ ggplot(aes(x = freq, y = demographic, fill = group, group=1, text = paste0(
+    "Yes: ", round(freq*100,2),paste0("%")))) +
+ geom_point(size = 4, shape = 21) +
+ scale_x_continuous(limits = c(0, .15), labels = scales::percent) +
+ scale_fill_discrete_sequential(palette = "sunset") +
+ labs(
+      x = "Percent who did not go to school because they felt unsafe", 
+      y = "Demographics") +
+ theme_bw() +
+ theme(legend.position = "none", axis.title.y = element_blank(),
+       axis.text = element_text(size = 8), plot.title = element_text(size = 10))
+
+demoplot2 <- demoplot + facet_grid(vars(group), scales = "free", space = "free")
+
+t1 <- list(
+size = 18
+)
+
+demoplot3 <- ggplotly(demoplot2, tooltip = "text") %>% 
+   layout(title = list(text = paste0('Reported Safety Concerns (past 30 days), 2019')))
+
+demoplot3 %>% 
+ ggplotly() %>% 
+   layout(title = list(y = 0.97, x = .20,
+                      xanchor = "middle",
+                      yef = "paper", font = t1))
+```
+
+State-Level Data {data-orientation=columns}
+=====================================
+
+## Column 1 {.tabset data-width="550,"}
+-------------------------------------
+### Safety Concerns
+```{r warning=FALSE, message=FALSE}
+g15 <- ggplot(school_geo15) +
+  geom_sf(aes(fill=percent, text = paste0(
+    "State: ", name,
+    "<br>",
+    "Yes: ", round(freq*100,2),paste0("%")))) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        rect = element_blank())
+
+g15 <- g15 + labs(fill="Percent")
+
+g15 <- g15 + rcartocolor::scale_fill_carto_c(palette = "Sunset")
+ggplotly(g15, tooltip = "text") %>% 
+   layout(title = list(y = .82, text = paste0('State-Level Results, 2019',
+                                    '<br>',
+                                    '<sup>',
+                                    'Did not go to school because they felt unsafe (past 30 days)',
+                                    '</sup>')))
+```
+
+### Physical Fights
+
+```{r warning=FALSE, message=FALSE}
+g18 <- ggplot(school_geo18) +
+  geom_sf(aes(fill=percent, text = paste0(
+    "State: ", name,
+    "<br>",
+    "Yes: ", round(freq*100,2),paste0("%")))) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        rect = element_blank())
+
+g18 <- g18 + labs(fill="Percent")
+  
+g18 <- g18 + rcartocolor::scale_fill_carto_c(palette = "Sunset")
+ggplotly(g18, tooltip = "text") %>% 
+   layout(title = list(y = .82, text = paste0('State-Level Results, 2019',
+                                    '<br>',
+                                    '<sup>',
+                                    'Were in a physical fight on school property (past 12 months)',
+                                    '</sup>')))
+```
+
+### Weapon Carrying
+
+```{r warning=FALSE, message=FALSE}
+g13 <- ggplot(school_geo13) +
+  geom_sf(aes(fill=percent, text = paste0(
+    "State: ", name,
+    "<br>",
+    "Yes: ", round(freq*100,2),paste0("%")))) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        rect = element_blank())
+
+g13 <- g13 + labs(fill="Percent")
+  
+g13 <- g13 + rcartocolor::scale_fill_carto_c(palette = "Sunset")
+ggplotly(g13, tooltip = "text") %>% 
+   layout(title = list(y = .82, text = paste0('State-Level Results, 2019',
+                                    '<br>',
+                                    '<sup>',
+                                    'Carried a weapon on school property (past 30 days)',
+                                    '</sup>')))
+```
+
+### Weapon Violence
+
+```{r warning=FALSE, message=FALSE}
+g16 <- ggplot(school_geo16) +
+  geom_sf(aes(fill=percent, text = paste0(
+    "State: ", name,
+    "<br>",
+    "Yes: ", round(freq*100,2),paste0("%")))) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        rect = element_blank())
+
+g16 <- g16 + labs(fill="Percent")
+  
+g16 <- g16 + rcartocolor::scale_fill_carto_c(palette = "Sunset")
+ggplotly(g16, tooltip = "text") %>% 
+   layout(title = list(y = .82, text = paste0('State-Level Results, 2019',
+                                    '<br>',
+                                    '<sup>',
+                                    'Were threatened/injured with a weapon at school (past 12 months)',
+                                    '</sup>')))
+```
+
+## Column 2 {data-width="450"}
+-------------------------------------
+### Bivariate Correlation Between State-level Data
+
+```{r message=F, warning=F}
+ggplot(law, aes(rank, freq)) +
+ geom_smooth(method=lm, color = "gray90") +
+ geom_point(size =3, color = "darkorchid4") +
+ geom_text_repel(aes(label = iso_3166_2), size = 3) +
+ scale_y_continuous(labels = scales::percent) +
+ labs(x = "State Gun Law Strength Ranking", 
+      y = "Carried Weapon (past 30 days)",
+       title = "Gun Law Strength and Weapon Carrying at School", 
+      subtitle = str_wrap("There is a significant correlation between states' gun law strength and the percentage of students who reported carrying a weapon at school (r = .392, p = .018)", 100)) +
+  theme_bw() +
+theme(plot.subtitle=element_text(size=9))
+```
+
+# Data Information
+
+<span style="color:#68228b">**YRBS Survey Data**</span>
+
+The Youth Risk Behavioral Surveillance (YRBS) System is comprised of biannual surveys by The Centers for Disease Control and Prevention (CDC) that monitor health, social, and environmental risk factors of middle and high school students in the United States. This systems includes: (1) a national school-based survey conducted by the CDC and state, territorial, tribal entities; and (2) local surveys conducted by state, territorial, and local education and health agencies and tribal governments.
+
+This project used two different versions of the YRBS Combined High School Datasets: (1) National surveys conducted in high schools between 1993 and 2019; (2) 2019 data from high school students collected by the state/district health or education agencies. The first allowed for trend analysis of weighted, nationally-representative data, whereas the latter allowed for analysis of the most recent weighted state-level data. Both datasets along with documentation of the questions and sampling processes can be found [here](https://www.cdc.gov/healthyyouth/data/yrbs/data.htm). 
+
+Although national data is available for 1991, school safety questions were not asked until 1993; as such, 1993 is the earliest timepoint available in national for the questions of interest. Additionally, state-level data availability vary by questions as states may choose to not ask certain survey questions or make the data publicly available. For example, 2019 data from Alaska on safety concerns, physical fighting, and weapon carrying are available but not for weapon violence.
+
+<span style="color:#68228b">**Giffords Law Center**</span>
+
+Data from Giffords Law Center's [2019 Annual Gun Law Scorecard](https://giffords.org/lawcenter/resources/scorecard2019) were also used. Each state is graded on their gun legislation and ranked from 1 (strongest) to weakest (50).
+
+Longitudinal Trends {data-orientation=rows data-navmenu="Draft Visualizations"}
+=====================================
+## Row 1 {data-height="250"}
+-------------------------------------
+### Summary of Changes
+My original and updated visualizations of national-level school safety trends are similar, but I made a couple changes based on feedback from peers and the instructor. First, I made the updated version interactive so that you can see more precise information when you hover over it (i.e., specific year and percentages for each safety indicator). I think that this change allows the audience to get a better understanding of the longitudinal trends in the data, particularly people who may struggle with understanding traditional axes. Second, I made the facet labels larger and wrapped the text of the questions on them so the font size would be larger. This made it easier for my audience to read the labels and thus will be easier to interpret. 
+
+## Row 2 {data-height="650"}
+-------------------------------------
+### Original Version
+```{r message=F, warning=F}
+ggplot(schoolsafetynat, aes(x = year, y = freq, fill = question)) +
+ facet_wrap(~question) +
+  geom_line() +
+  geom_point(size = 3, shape = 21) +
+ scale_x_continuous(limits = c(1993,2019), n.breaks = 7) +
+ scale_y_continuous(limits = c(0, .20), labels = scales::percent) +
+ scale_fill_discrete_sequential(palette = "sunset") +
+ labs(x = "Year", y = "Percent of students surveyed", title = "School Safety Trends Reported by U.S. High School Students") +
+ theme_bw() +
+ theme(legend.position = "none", strip.text = element_text(size = 6), 
+       axis.text = element_text(size = 7))
+```
+
+### Updated Version
+```{r message=F, warning=F}
+nat <- ggplot(schoolsafetynat, aes(x = year, y = freq, fill = question, group=1, text = paste0(
+    "Year: ", year,
+    "<br>",
+    "Yes: ", round(freq*100,2),paste0("%")))) +
+ facet_wrap(~question, labeller = label_wrap_gen(width = 40)) +
+  geom_line() +
+  geom_point(size = 3, shape = 21) +
+ scale_x_continuous(limits = c(1993,2019), n.breaks = 7) +
+ scale_y_continuous(limits = c(0, .20), labels = scales::percent) +
+ scale_fill_discrete_sequential(palette = "sunset") +
+ labs(x = "Year", y = "Percent of students surveyed", title = "School Safety Trends Reported by U.S. High School Students") +
+ theme_bw() +
+  theme(legend.position = "none", 
+        axis.text = element_text(size = 7), panel.spacing.y = unit(8, "pt"),
+        plot.title = element_text(size=12))
+
+facet_strip_bigger <- function(gp, size){
+  if(missing(gp)){
+    print("this function needs a facet_wrap ggplotly object")
+  }
+  if(missing(size)){
+    size <- 35
+  }
+ 
+   n_facets <- c(1:length(gp[["x"]][["layout"]][["shapes"]]))
+  
+  for(i in n_facets){
+    if(n_facets[i] %% 2 == 0){
+      gp[["x"]][["layout"]][["shapes"]][[i]][["y0"]] <- + as.numeric(size)
+      gp[["x"]][["layout"]][["shapes"]][[i]][["y1"]] <- 0
+    }
+  }
+  
+  return(gp)
+}
+
+x <- ggplotly(nat, tooltip = "text")
+
+x %>% 
+ ggplotly() %>% 
+   layout(title = list(y = 0.97,
+                      yanchor = "top",
+                      yef = "container"),
+         margin = list(t = 80)) %>% 
+ facet_strip_bigger()
+```
+
+
+Safety Concerns Demographics {data-orientation=rows data-navmenu="Draft Visualizations"}
+=====================================
+## Row 1 {data-height="250"}
+-------------------------------------
+### Summary of Changes
+My original version relied upon the audience understanding that demographic groups were part of the same demographic category based on the color of their dots, but I updated it using a facet grid to clearly identify/label the demographic categories and their respective groups. In the facet grids, I made sure that the grid lines were consistent across the demographic categories. I also made the updated version interactive so that you can see the percentages for each group when you hover over their respective dots. Last, I ordered the demographic categories so that sexual identity would be at the top of the plot because it contained the groups with the highest proportion of safety concerns. Overall, I think that these changes make the visualization much clearer for my audience.
+
+## Row 2 {data-height="650"}
+-------------------------------------
+### Original Version
+```{r}
+demos %>%
+ ggplot(aes(x = freq, y = demographic, fill = group)) +
+ geom_point(size = 4, shape = 21) +
+ scale_x_continuous(limits = c(0, .15), labels = scales::percent) +
+ scale_fill_discrete_sequential(palette = "sunset") +
+ labs(title = "Did not go to school because they felt unsafe (past 30 days)",
+       x = "Percentage of students", y = "Demographics") +
+ theme_bw() +
+ theme(legend.direction = "horizontal", legend.position = "none", plot.title =
+        element_text(size = 12))
+```
+
+
+### Updated Version
+```{r}
+demoplot <- demos %>%
+ ggplot(aes(x = freq, y = demographic, fill = group, group=1, text = paste0(
+    "Yes: ", round(freq*100,2),paste0("%")))) +
+ geom_point(size = 4, shape = 21) +
+ scale_x_continuous(limits = c(0, .15), labels = scales::percent) +
+ scale_fill_discrete_sequential(palette = "sunset") +
+ labs(
+      x = "Percent who did not go to school because they felt unsafe", 
+      y = "Demographics") +
+ theme_bw() +
+ theme(legend.position = "none", axis.title.y = element_blank(),
+       axis.text = element_text(size = 8), plot.title = element_text(size = 10))
+
+demoplot2 <- demoplot + facet_grid(vars(group), scales = "free", space = "free")
+
+t1 <- list(
+size = 18
+)
+
+demoplot3 <- ggplotly(demoplot2, tooltip = "text") %>% 
+   layout(title = list(text = paste0('Reported Safety Concerns (past 30 days), 2019')))
+
+demoplot3 %>% 
+ ggplotly() %>% 
+   layout(title = list(y = 0.97, x = .20,
+                      xanchor = "middle",
+                      yef = "paper", font = t1))
+```
+
+State-Level Results {data-orientation=columns data-navmenu="Draft Visualizations"} 
+=====================================
+## Column 1 {data-width="650"}
+-------------------------------------
+### Summary of Changes
+My original version showed all four maps at the same time using the same legend scale. I decided that it would be better to use tabs on the dashboard to display each map one at a time (updated version shown on the right). This allowed for each graph to have a different legend scale, which is helpful for seeing differences between states on maps where many of the results are in close proximity. For example, in the original version of the weapon violence map, the difference between the states were hard to decipher from the colors as most fall of the data is less 5% (with the maximum being 8.5%), and as such, the original legend scale did not allow for much color variation with those numbers. By having its own legend scale, it is much easier to identify the states with the lowest and highest values. Additionally, based on peer and instructor feedback, I removed the latitude gridlines and made the visualization interactive.
+
+### Original Version
+```{r}
+ggplot(school_geo) +
+geom_sf(aes(fill = percent)) +
+facet_wrap(~question) +
+colorspace::scale_fill_continuous_sequential(palette = "Sunset", na.value = "gray90", name = "Percentage of Students Surveyed", guide = guide_colorbar(title.position = "top", title.hjust = 0.5)) +
+ labs(title="School Safety Across the United States", 
+      caption = "Source: CDC YRBS (2019)") +
+theme_minimal() +
+theme(legend.direction = "horizontal",
+legend.position = "bottom",
+legend.key.size = unit(2, 'cm'),
+legend.key.height = unit(.5,"cm"),
+axis.text.x = element_text(size = 5))
+```
+
+## Column 2 {.tabset data-width="550,"}
+-------------------------------------
+### Safety Concerns
+```{r warning=FALSE, message=FALSE}
+g15 <- ggplot(school_geo15) +
+  geom_sf(aes(fill=percent, text = paste0(
+    "State: ", name,
+    "<br>",
+    "Yes: ", round(freq*100,2),paste0("%")))) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        rect = element_blank())
+  
+g15 <- g15 + rcartocolor::scale_fill_carto_c(palette = "Sunset")
+ggplotly(g15, tooltip = "text") %>% 
+   layout(title = list(y = .82, text = paste0('State-Level Results, 2019',
+                                    '<br>',
+                                    '<sup>',
+                                    'Did not go to school because they felt unsafe (past 30 days)',
+                                    '</sup>')))
+```
+
+### Physical Fights
+```{r warning=FALSE, message=FALSE}
+g18 <- ggplot(school_geo18) +
+  geom_sf(aes(fill=percent, text = paste0(
+    "State: ", name,
+    "<br>",
+    "Yes: ", round(freq*100,2),paste0("%")))) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        rect = element_blank())
+  
+g18 <- g18 + rcartocolor::scale_fill_carto_c(palette = "Sunset")
+ggplotly(g18, tooltip = "text") %>% 
+   layout(title = list(y = .82, text = paste0('State-Level Results, 2019',
+                                    '<br>',
+                                    '<sup>',
+                                    'Were in a physical fight on school property (past 12 months)',
+                                    '</sup>')))
+```
+
+### Weapon Carrying
+```{r warning=FALSE, message=FALSE}
+g13 <- ggplot(school_geo13) +
+  geom_sf(aes(fill=percent, text = paste0(
+    "State: ", name,
+    "<br>",
+    "Yes: ", round(freq*100,2),paste0("%")))) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        rect = element_blank())
+  
+g13 <- g13 + rcartocolor::scale_fill_carto_c(palette = "Sunset")
+ggplotly(g13, tooltip = "text") %>% 
+   layout(title = list(y = .82, text = paste0('State-Level Results, 2019',
+                                    '<br>',
+                                    '<sup>',
+                                    'Carried a weapon on school property (past 30 days)',
+                                    '</sup>')))
+```
+
+### Weapon Violence
+```{r warning=FALSE, message=FALSE}
+g16 <- ggplot(school_geo16) +
+  geom_sf(aes(fill=percent, text = paste0(
+    "State: ", name,
+    "<br>",
+    "Yes: ", round(freq*100,2),paste0("%")))) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        rect = element_blank())
+  
+g16 <- g16 + rcartocolor::scale_fill_carto_c(palette = "Sunset")
+ggplotly(g16, tooltip = "text") %>% 
+   layout(title = list(y = .82, text = paste0('State-Level Results, 2019',
+                                    '<br>',
+                                    '<sup>',
+                                    'Were threatened/injured with a weapon at school (past 12 months)',
+                                    '</sup>')))
+```
+
+Gun Law Strength Correlation {data-orientation=rows data-navmenu="Draft Visualizations"}
+=====================================
+## Row 1 {data-height="200"}
+-------------------------------------
+### Summary of Changes
+This visualization remained pretty consistent, but I decided to make a few small changes. First, I used the black and white theme to match that of my other visualizations, which removed the gray plot background and added a black border to the plot. I also chose to add a subtitle that stated the statistical relationship between these two variables, which provides additional context for the audience.
+
+## Row 2 {data-height="700"}
+-------------------------------------
+### Original Version
+```{r message=FALSE, warning=FALSE}
+ggplot(law, aes(rank, freq)) +
+ geom_smooth(method=lm, color = "gray90") +
+ geom_point(size =3, color = "darkorchid4") +
+ geom_text_repel(aes(label = iso_3166_2), size = 3) +
+ scale_y_continuous(labels = scales::percent) +
+ labs(x = "State Gun Law Strength Ranking", 
+      y = "Carried Weapon (past 30 days)",
+      title = "Gun Law Strength and Weapon Carrying at School")
+```
+
+### Updated Version
+```{r message=FALSE, warning=FALSE}
+ggplot(law, aes(rank, freq)) +
+ geom_smooth(method=lm, color = "gray90") +
+ geom_point(size =3, color = "darkorchid4") +
+ geom_text_repel(aes(label = iso_3166_2), size = 3) +
+ scale_y_continuous(labels = scales::percent) +
+ labs(x = "State Gun Law Strength Ranking", 
+      y = "Carried Weapon (past 30 days)",
+       title = "Gun Law Strength and Weapon Carrying at School", 
+      subtitle = str_wrap("There is a significant correlation between states' gun law strength and the percentage of students who reported carrying a weapon at school (r = .392, p = .018).", 100)) +
+  theme_bw() +
+theme(plot.subtitle=element_text(size=9))
+```
+
